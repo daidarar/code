@@ -66,7 +66,7 @@ void loop() {
   boolean left_sensor_state = digitalRead(left_sensor_pin);
   boolean right_sensor_state = digitalRead(right_sensor_pin);
 
-  if (distance < stop_distance) {
+  if (distance < stop_distance) {//30cm以内のライン上に障害物を認識すると,ラインを避けて障害物回避を行い,再びラインに復帰する.
     if (!OnFlg) {
       Gostop();
       Serial.println("停止");
