@@ -1,0 +1,157 @@
+int vSpeed = 110;
+int turn_speed = 230;       // 0 - 255  max
+int t_p_speed = 125;
+int stop_distance = 30;
+int turn_delay = 10;
+
+// HC-SR04 Sensor connection
+const int trigPin = 11;
+const int echoPin = 12;
+
+// L298 Connection
+const int motorA1 = 4;  //右モーター
+const int motorA2 = 3;
+const int motorAspeed = 5;
+const int motorB1 = 8;  //左モーター
+const int motorB2 = 7;
+const int motorBspeed = 6;
+
+// 赤外線センサー
+// Sensor Connection
+const int left_sensor_pin = 9;
+const int right_sensor_pin = 10;
+
+int turnspeed;
+int left_sensor_state;
+int right_sensor_state;
+boolean OnFlg = false;
+
+long duration;
+int distance;
+
+boolean lineTraceMode = false;
+
+// PID Constants
+double kp = 2.5; // Proportional constant
+double ki = 0.1; // Integral constant
+double kd = 0.1; // Derivative constant
+double last_error = 0;
+double total_error = 0;
+
+void setup() {
+  pinMode(motorA1, OUTPUT);
+  pinMode(motorA2, OUTPUT);
+  pinMode(motorB1, OUTPUT);
+  pinMode(motorB2, OUTPUT);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(motorAspeed, OUTPUT);
+  pinMode(motorBspeed, OUTPUT);
+
+  Serial.begin(9600);
+  delay(3000);
+}
+
+void loop() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration * 0.034 / 2;
+  Serial.print("Distance: ");
+  Serial.println(distance); //距離読み取り
+
+  boolean left_sensor_state = digitalRead(left_sensor_pin);
+  boolean right_sensor_state = digitalRead(right_sensor_pin);
+
+  if (distance < stop_distance) {
+    if (!OnFlg) {
+      Gostop();
+      Serial.println("停止");
+      OnFlg = true;
+      yoke();
+      Serial.println("障害物回避");
+    }
+  } else {
+    OnFlg = false;
+    if (!lineTraceMode) {
+      forwardAfterYoke();
+      lineTraceMode = true;
+    }
+    lineTrace(); // Perform line tracing
+  }
+
+  // Motor control based on line tracing sensors
+  if (right_sensor_state == HIGH && left_sensor_state == LOW) //左白、右黒なら右旋回
+  {
+    turnLeft();
+    Serial.println("turning left");
+  }
+
+  if (right_sensor_state == LOW && left_sensor_state == HIGH) //右白、左黒なら左旋回
+  {
+    turnRight();
+    Serial.println("turning right");
+  }
+
+  if (right_sensor_state == LOW && left_sensor_state == LOW) //左右白なら直進
+  {
+    forward();
+    Serial.println("going forward");
+  }
+
+  if (right_sensor_state == HIGH && left_sensor_state == HIGH) //左右黒なら停止して右向きに180°反転
+  {
+    returnLeft();
+    Serial.println("returnLeft");
+  }
+}
+
+void returnLeft() {
+  forward();
+  delay(500);
+  turnRight();
+  delay(10200);
+  forward();
+  delay(1000);
+  turnLeft();
+  delay(3000);
+  forwardAfterYoke();
+}
+
+void yoke() {
+  Gostop();
+  delay(300);
+  turnRight();
+  delay(1800);
+  forward();
+  delay(2200);
+  turnLeft();
+  delay(3200);
+  forward();
+  delay(2200);
+  turnLeft();
+  delay(3500);
+  forward();
+  delay(1000);
+  turnRight();
+  delay(1800);
+}
+
+void lineTrace() {
+  
+  double error = left_sensor_state - right_sensor_state;
+  double pid_value = kp * error + ki * total_error + kd * (error - last_error);
+  last_error = error;
+  total_error += error;
+
+  
+  int left_motor_speed = vSpeed + pid_value;
+  int right_motor_speed = vSpeed - pid_value;
+
+  
+  left_motor_speed = constrain(left_motor_speed, 0, 255);
+  right_motor_speed = constrain(right_motor_speed, 0, 255);
+}
